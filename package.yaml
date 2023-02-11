@@ -17,4 +17,4 @@ executables:
   colortransfer:
     main: Main.hs
     source-dirs: ./src/
-    ghc-options: [-rtsopts, -threaded, -with-rtsopts=-N]
+    ghc-options: [-rtsopts, -threaded, -with-rtsopts=-N, -O2]
