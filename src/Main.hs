@@ -18,7 +18,6 @@ import Data.ByteString.Lazy.Char8 qualified as B
 import Data.Either
 import Data.Word
 import GHC.Generics (Generic)
-import Options.Applicative
 import Options.Generic
 import System.Environment
 

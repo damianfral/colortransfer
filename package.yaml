@@ -6,10 +6,7 @@ license-file: LICENSE
 dependencies:
   - base
   - bytestring
-  - optparse-applicative
   - optparse-generic
-  - relude
-  - text
   - JuicyPixels
 library:
   source-dirs: ./src/
@@ -17,4 +14,4 @@ executables:
   colortransfer:
     main: Main.hs
     source-dirs: ./src/
-    ghc-options: [-rtsopts, -threaded, -with-rtsopts=-N, -O2]
+    ghc-options: [-Wall, -rtsopts, -threaded, -with-rtsopts=-N, -O2]
