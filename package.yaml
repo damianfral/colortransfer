@@ -8,6 +8,10 @@ dependencies:
   - bytestring
   - optparse-generic
   - JuicyPixels
+  - free
+  - comonad
+  - text
+  - mtl
 library:
   source-dirs: ./src/
 executables:
