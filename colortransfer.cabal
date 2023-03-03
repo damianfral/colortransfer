@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.35.2.
 --
 -- see: https://github.com/sol/hpack
 
@@ -23,7 +23,10 @@ library
     , base
     , bytestring
     , comonad
+    , fixplate
     , free
+    , generic-lens
+    , lens
     , mtl
     , optparse-generic
     , text
@@ -42,7 +45,10 @@ executable colortransfer
     , base
     , bytestring
     , comonad
+    , fixplate
     , free
+    , generic-lens
+    , lens
     , mtl
     , optparse-generic
     , text

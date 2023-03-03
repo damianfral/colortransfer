@@ -10,8 +10,11 @@ dependencies:
   - JuicyPixels
   - free
   - comonad
+  - generic-lens
+  - lens
   - text
   - mtl
+  - fixplate
 library:
   source-dirs: ./src/
 executables:
