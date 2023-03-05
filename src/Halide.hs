@@ -20,6 +20,7 @@
 
 module Halide where
 
+import Control.Arrow ((>>>))
 import Control.Monad.State (MonadState (..), State, modify)
 import Data.Data (Proxy (..))
 import Data.Function (on)
@@ -39,16 +40,16 @@ newtype FuncName = FuncName {unFuncName :: Text}
   deriving stock (Eq, Show)
   deriving newtype (IsString)
 
+newtype Param (a :: ScalarType) = Param Text
+  deriving (Show)
+
+newtype ImageParam (d :: Dimensions) (a :: ScalarType) = ImageParam Text
+  deriving (Show)
+
 data Func (d :: Dimensions) (a :: ScalarType) = Func
   { name :: FuncName,
     body :: InferArgs d -> Expr a
   }
-
-newtype ParamName = ParamName Text deriving (Show)
-
-newtype Param (a :: ScalarType) = Param ParamName
-
-newtype ImageParam (d :: Dimensions) (a :: ScalarType) = ImageParam Text
 
 -- All Exprs have a scalar type, and all Funcs evaluate to one or
 -- more scalar types. The scalar types in Halide are unsigned
@@ -193,10 +194,9 @@ data ExprF f
 
 data Tag = Tag
   { vars :: [Var],
-    params :: [ParamName],
-    funcs :: [FuncName]
+    params :: [forall a. Param a],
+    funcs :: [forall d a. Func d a]
   }
-  deriving (Show)
 
 instance Semigroup Tag where
   t1 <> t2 =
@@ -210,6 +210,36 @@ instance Monoid Tag where
   mempty = Tag [] [] []
 
 type MuExprF = Mu ExprF
+
+instance Num MuExprF where
+  (+) = add
+  (-) = sub
+  (*) = mul
+  negate a = int 0 - a
+
+var :: Text -> MuExprF
+var = Fix . FVar . Var
+
+int :: Int -> MuExprF
+int = Fix . FInt
+
+double :: Double -> MuExprF
+double = Fix . FDouble
+
+add :: MuExprF -> MuExprF -> MuExprF
+add a b = Fix $ FAdd a b
+
+sub :: MuExprF -> MuExprF -> MuExprF
+sub a b = Fix $ FSub a b
+
+mul :: MuExprF -> MuExprF -> MuExprF
+mul a b = Fix $ FMul a b
+
+min :: MuExprF -> MuExprF -> MuExprF
+min a b = Fix $ FMin a b
+
+max :: MuExprF -> MuExprF -> MuExprF
+max a b = Fix $ FMax a b
 
 type AST = Attr ExprF Tag
 
@@ -243,7 +273,7 @@ toAST :: Expr a -> Attr ExprF Tag
 toAST = synthetise f . toMuExprF
   where
     f (FVar v) = mempty {vars = [v]}
-    f (FFAt name _) = mempty {funcs = [name]}
+    f (FFAt name _) = mempty {funcs = []} -- TODO: Wrong!
     f _ = mempty
 
 -- | An F-Algebra like explained
@@ -265,8 +295,8 @@ getTag = cata go
     go (Ann tag (FCast _ g)) = tag <> g
     go x = attr x
 
-compile :: AST -> Text
-compile = cata (go . unAnn)
+compileAST :: AST -> Text
+compileAST = cata (go . unAnn)
   where
     go (FVar v) = unVar v
     go (FInt v) = pack $ show v
@@ -279,6 +309,9 @@ compile = cata (go . unAnn)
     go (FAt spaceName g) = spaceName <> wrapInParens (intercalate ", " g)
     go (FFAt funcName g) = unFuncName funcName <> wrapInParens (intercalate ", " g)
     go (FCast c g) = "<" <> c <> ">" <> wrapInParens g
+
+compile :: Expr a -> Text
+compile = toAST >>> compileAST
 
 --------------------------------------------------------------------------------
 
