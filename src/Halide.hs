@@ -2,7 +2,6 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -28,7 +27,6 @@ import Data.Generics.Fixplate
 import Data.Generics.Labels ()
 import Data.String (IsString)
 import Data.Text (Text, intercalate, pack)
-import GHC.Generics (Generic)
 
 --------------------------------------------------------------------------------
 
@@ -105,6 +103,7 @@ type family InferType a b where
   InferType _ 'U16 = 'U16
   InferType 'U8 _ = 'U8
   InferType _ 'U8 = 'U8
+  InferType a a = a
 
 type family InferArgs a where
   InferArgs 'D0 = N0 Var
@@ -124,6 +123,11 @@ data Expr (a :: ScalarType) where
   EMax :: Expr a -> Expr b -> Expr (InferType a b)
   EAt :: At (d :: Dimensions) a -> Expr a
   ECast :: Cast (b :: ScalarType) -> Expr a -> Expr b
+
+instance Num (Expr (a :: ScalarType)) where
+  (+) = EAdd
+  (-) = ESub
+  (*) = EMul
 
 data N0 a = N0
 
@@ -186,16 +190,13 @@ data ExprF f
   | FMin f f
   | FMax f f
   | FAt Text [f]
-  | FFAt FuncName [f] -- At for functions, since they need to be tracked in order to be declared.
   | FCast CastSimple f
-  deriving (Show)
-  deriving (Generic)
   deriving (Functor)
 
 data Tag = Tag
   { vars :: [Var],
-    params :: [forall a. Param a],
-    funcs :: [forall d a. Func d a]
+    params :: [Text],
+    spaces :: [Text]
   }
 
 instance Semigroup Tag where
@@ -203,44 +204,13 @@ instance Semigroup Tag where
     Tag
       { vars = ((<>) `on` vars) t1 t2,
         params = ((<>) `on` params) t1 t2,
-        funcs = ((<>) `on` funcs) t1 t2
+        spaces = ((<>) `on` spaces) t1 t2
       }
 
 instance Monoid Tag where
   mempty = Tag [] [] []
 
 type MuExprF = Mu ExprF
-
-instance Num MuExprF where
-  (+) = add
-  (-) = sub
-  (*) = mul
-  negate a = int 0 - a
-
-var :: Text -> MuExprF
-var = Fix . FVar . Var
-
-int :: Int -> MuExprF
-int = Fix . FInt
-
-double :: Double -> MuExprF
-double = Fix . FDouble
-
-add :: MuExprF -> MuExprF -> MuExprF
-add a b = Fix $ FAdd a b
-
-sub :: MuExprF -> MuExprF -> MuExprF
-sub a b = Fix $ FSub a b
-
-mul :: MuExprF -> MuExprF -> MuExprF
-mul a b = Fix $ FMul a b
-
-min :: MuExprF -> MuExprF -> MuExprF
-min a b = Fix $ FMin a b
-
-max :: MuExprF -> MuExprF -> MuExprF
-max a b = Fix $ FMax a b
-
 type AST = Attr ExprF Tag
 
 fixAnn :: p -> f (Attr f p) -> Attr f p
@@ -262,18 +232,14 @@ toMuExprF (EAt at) = atToFAt at
   where
     atToFAt :: forall d a. At d a -> MuExprF
     atToFAt (At {..}) =
-      Fix
-        ( if isFunc space
-            then FFAt (FuncName $ spaceID space) $ toMuExprF <$> coordinatesToList @d coordinates
-            else FAt (spaceID space) $ toMuExprF <$> coordinatesToList @d coordinates
-        )
+      Fix $ FAt (spaceID space) $ toMuExprF <$> coordinatesToList @d coordinates
 toMuExprF (ECast cast x) = Fix $ FCast (castToCastSimple cast) (toMuExprF x)
 
 toAST :: Expr a -> Attr ExprF Tag
 toAST = synthetise f . toMuExprF
   where
     f (FVar v) = mempty {vars = [v]}
-    f (FFAt name _) = mempty {funcs = []} -- TODO: Wrong!
+    f (FAt space _) = mempty {spaces = [space]}
     f _ = mempty
 
 -- | An F-Algebra like explained
@@ -291,7 +257,7 @@ getTag = cata go
     go (Ann tag (FMul f g)) = tag <> f <> g
     go (Ann tag (FMin f g)) = tag <> f <> g
     go (Ann tag (FMax f g)) = tag <> f <> g
-    go (Ann tag (FFAt _ g)) = tag <> mconcat g
+    go (Ann tag (FAt _ g)) = tag <> mconcat g
     go (Ann tag (FCast _ g)) = tag <> g
     go x = attr x
 
@@ -307,7 +273,7 @@ compileAST = cata (go . unAnn)
     go (FMin f g) = mconcat ["min", wrapInParens $ f <> ", " <> g]
     go (FMax f g) = mconcat ["max", wrapInParens $ f <> ", " <> g]
     go (FAt spaceName g) = spaceName <> wrapInParens (intercalate ", " g)
-    go (FFAt funcName g) = unFuncName funcName <> wrapInParens (intercalate ", " g)
+    -- go (FFAt funcName g) = unFuncName funcName <> wrapInParens (intercalate ", " g)
     go (FCast c g) = "<" <> c <> ">" <> wrapInParens g
 
 compile :: Expr a -> Text
@@ -315,28 +281,36 @@ compile = toAST >>> compileAST
 
 --------------------------------------------------------------------------------
 
-testExpr :: Expr 'U64
-testExpr = EMul (EInt 2) (EAdd (EVar $ Var "x") (EInt 4))
+testExpr :: Expr 'U32
+testExpr =
+  let x = Var "x"
+      y = Var "y"
+   in ECast u32 (EInt 2) * EAt (At gradient (N2 (EVar x) (EVar y)))
+
+data SpaceType = Function | Image deriving (Eq)
+
+isFunc :: Space d f => f d a -> Bool
+isFunc s = spaceType s == Function
 
 class (HasCoordinates d) => Space d f where
   spaceID :: f d a -> Text
-  isFunc :: f d a -> Bool
+  spaceType :: f d a -> SpaceType
 
 instance Space 'D1 Func where
   spaceID = unFuncName . name
-  isFunc _ = True
+  spaceType _ = Function
 
 instance Space 'D2 Func where
   spaceID = unFuncName . name
-  isFunc _ = True
+  spaceType _ = Function
 
 instance Space 'D3 Func where
   spaceID = unFuncName . name
-  isFunc _ = True
+  spaceType _ = Function
 
 instance Space 'D4 Func where
   spaceID = unFuncName . name
-  isFunc _ = True
+  spaceType _ = Function
 
 --------------------------------------------------------------------------------
 
