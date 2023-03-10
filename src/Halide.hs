@@ -2,6 +2,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -10,6 +11,7 @@
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -20,7 +22,8 @@
 module Halide where
 
 import Control.Arrow ((>>>))
-import Control.Monad.State (MonadState (..), State, modify)
+import Control.Lens (Lens', lens, (%~))
+import Control.Monad.State (State, gets, modify)
 import Data.Data (Proxy (..))
 import Data.Function (on)
 import Data.Generics.Fixplate
@@ -211,6 +214,7 @@ instance Monoid Tag where
   mempty = Tag [] [] []
 
 type MuExprF = Mu ExprF
+
 type AST = Attr ExprF Tag
 
 fixAnn :: p -> f (Attr f p) -> Attr f p
@@ -246,9 +250,6 @@ toAST = synthetise f . toMuExprF
 -- <https://www.schoolofhaskell.com/user/bartosz/understanding-algebras here>.
 type Algebra f a = (Functor f) => (f a -> a)
 
--- foldTags :: (Functor f, Foldable f, Monoid tag) => Attr f tag -> tag
--- foldTags = unFix >>>
---
 getTag :: AST -> Tag
 getTag = cata go
   where
@@ -273,7 +274,6 @@ compileAST = cata (go . unAnn)
     go (FMin f g) = mconcat ["min", wrapInParens $ f <> ", " <> g]
     go (FMax f g) = mconcat ["max", wrapInParens $ f <> ", " <> g]
     go (FAt spaceName g) = spaceName <> wrapInParens (intercalate ", " g)
-    -- go (FFAt funcName g) = unFuncName funcName <> wrapInParens (intercalate ", " g)
     go (FCast c g) = "<" <> c <> ">" <> wrapInParens g
 
 compile :: Expr a -> Text
@@ -314,22 +314,29 @@ instance Space 'D4 Func where
 
 --------------------------------------------------------------------------------
 
-newtype Counter a = Counter {runCounter :: State Int a}
-  deriving newtype (Functor, Applicative, Monad, MonadState Int)
+data Store = Store
+  { counter :: Int,
+    funcs :: Func (forall d. d :: Dimensions) (forall a. a)
+  }
 
-getNextID :: Text -> Counter Text
+type AppM a = State Store a
+
+getNextID :: Text -> AppM Text
 getNextID prefix = do
-  i <- get
-  modify $ (+) 1
+  i <- gets counter
+  modify $ counterL %~ (+) 1
   pure $ prefix <> "_" <> pack (show i)
 
-newVar :: Counter Var
+counterL :: Lens' Store Int
+counterL = lens counter (\s c -> s {counter = c})
+
+newVar :: AppM Var
 newVar = Var <$> getNextID "var_"
 
--- newFunc :: (InferArgs d -> Expr a) -> Counter (Func d a)
--- newFunc body = do
---   name <- getNextID "func_"
---   pure $ Func {name, body}
+newFunc :: (InferArgs d -> Expr a) -> AppM (Func d a)
+newFunc body = do
+  name <- FuncName <$> getNextID "func_"
+  pure $ Func {name, body}
 
 --------------------------------------------------------------------------------
 
