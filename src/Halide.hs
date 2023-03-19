@@ -18,6 +18,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Halide where
 
@@ -25,12 +26,14 @@ import Control.Arrow ((>>>))
 import Control.Lens (Lens', lens, (%~))
 import Control.Monad.State (State, gets, modify)
 import Data.Data (Proxy (..))
+import Data.Foldable (Foldable (toList), fold)
 import Data.Function (on)
 import Data.Generics.Fixplate
 import Data.Generics.Labels ()
 import Data.Generics.Product ()
 import Data.String (IsString)
 import Data.Text (Text, intercalate, pack)
+import qualified Data.Text as T
 import GHC.Generics (Generic)
 
 --------------------------------------------------------------------------------
@@ -44,6 +47,9 @@ newtype FuncName = FuncName {unFuncName :: Text}
   deriving stock (Eq, Show)
   deriving newtype (IsString)
 
+data Buffer = Buffer {bufferName :: Text, bufferFunc :: Func', bufferSize :: [Int]}
+  deriving stock (Generic)
+
 newtype Param (a :: ScalarType) = Param Text
   deriving (Show)
 
@@ -52,8 +58,9 @@ newtype ImageParam (d :: Dimensions) (a :: ScalarType) = ImageParam Text
 
 -- | A Func represents a pipeline stage.
 data Func (d :: Dimensions) (a :: ScalarType) = Func
-  { name :: FuncName,
-    body :: InferArgs d -> Expr a
+  { funcName :: FuncName,
+    funcBody :: InferArgs d -> Expr a,
+    funcArgs :: InferArgs d
   }
 
 --- | A wrapper over `Func d a` to hide the type variables.
@@ -160,19 +167,34 @@ instance HasCoordinates 'D0 where
 
 instance HasCoordinates 'D1 where
   type Coordinates 'D1 = N1 (Expr 'U32)
-  coordinatesToList (N1 v) = [v]
+  coordinatesToList = toList
 
 instance HasCoordinates 'D2 where
   type Coordinates 'D2 = N2 (Expr 'U32)
-  coordinatesToList (N2 v1 v2) = [v1, v2]
+  coordinatesToList = toList
 
 instance HasCoordinates 'D3 where
   type Coordinates 'D3 = N3 (Expr 'U32)
-  coordinatesToList (N3 v1 v2 v3) = [v1, v2, v3]
+  coordinatesToList = toList
 
 instance HasCoordinates 'D4 where
   type Coordinates 'D4 = N4 (Expr 'U32)
-  coordinatesToList (N4 v1 v2 v3 v4) = [v1, v2, v3, v4]
+  coordinatesToList = toList
+
+instance Foldable N0 where
+  foldMap _ N0 = mempty
+
+instance Foldable N1 where
+  foldMap f (N1 v) = f v
+
+instance Foldable N2 where
+  foldMap f (N2 v1 v2) = foldMap f [v1, v2]
+
+instance Foldable N3 where
+  foldMap f (N3 v1 v2 v3) = foldMap f [v1, v2, v3]
+
+instance Foldable N4 where
+  foldMap f (N4 v1 v2 v3 v4) = foldMap f [v1, v2, v3, v4]
 
 --------------------------------------------------------------------------------
 
@@ -184,7 +206,7 @@ data At d a = forall f.
     func :: Maybe (Func d a)
   }
 
-data At' = forall d a. At' (At d a)
+data At' = forall d a. At' {at' :: At d a}
 
 data ExprF f
   = FVar Var
@@ -249,7 +271,7 @@ toAST = synthetise f . toMuExprF
     f (FVar v) = mempty {vars = [v]}
     f (FAt (At' a) _) =
       case func a of
-        Just g -> mempty {funcs = [Func' g]}
+        Just g -> mempty {funcs = [Func' g], vars = funcVars g}
         Nothing -> mempty -- {spaces = spaceID $ space at}
     f _ = mempty
 
@@ -265,12 +287,19 @@ getTag = cata go
     go (Ann tag (FMul f g)) = tag <> f <> g
     go (Ann tag (FMin f g)) = tag <> f <> g
     go (Ann tag (FMax f g)) = tag <> f <> g
-    go (Ann tag (FAt _ g)) = tag <> mconcat g
+    go (Ann tag (FAt (At' _) g)) = tag <> mconcat g
     go (Ann tag (FCast _ g)) = tag <> g
     go x = attr x
 
+funcVars :: InferArgs d ~ args Var => Func d a -> [Var]
+funcVars func = toList $ funcArgs func
+
 compileAST :: AST -> Text
-compileAST = cata (go . unAnn)
+compileAST ast =
+  T.unlines
+    [ compileDeclarations $ getDeclarations ast,
+      cata (go . unAnn) ast
+    ]
   where
     go (FVar v) = unVar v
     go (FInt v) = pack $ show v
@@ -283,6 +312,48 @@ compileAST = cata (go . unAnn)
     go (FAt (At' (At {space})) g) = spaceID space <> wrapInParens (intercalate ", " g)
     go (FCast c g) = "<" <> c <> ">" <> wrapInParens g
 
+compileDeclarations :: Tag -> Text
+compileDeclarations tag = T.unlines [varDeclarations, funcDeclarations]
+  where
+    varDeclarations = T.unlines $ declareVar <$> vars tag
+    funcDeclarations = T.unlines $ declareFunc <$> funcs tag
+    declareVar (Var x) = "Var " <> x <> ";"
+    declareFunc (Func' f) = compileFunc f
+
+compileFunc ::
+  forall coordinates d a.
+  coordinates Var ~ InferArgs d =>
+  coordinates Var ->
+  Func d a ->
+  Text
+compileFunc coordinates Func {..} =
+  T.unlines
+    [ "Func " <> unFuncName funcName <> ";",
+      unFuncName funcName
+        <> "( "
+        <> intercalate ", " (unVar <$> toList @coordinates coordinates)
+        <> " ) "
+        <> " = "
+        <> rSide
+        <> ";"
+    ]
+  where
+    rSide :: Text
+    rSide = compileAST $ toAST $ funcBody coordinates
+
+getDeclarations :: AST -> Tag
+getDeclarations = cata go
+  where
+    go :: Ann ExprF Tag Tag -> Tag
+    go (Ann tag (FAdd f g)) = tag <> f <> g
+    go (Ann tag (FSub f g)) = tag <> f <> g
+    go (Ann tag (FMul f g)) = tag <> f <> g
+    go (Ann tag (FMax f g)) = tag <> f <> g
+    go (Ann tag (FMin f g)) = tag <> f <> g
+    go (Ann tag (FAt _ g)) = tag <> fold g
+    go (Ann tag (FCast _ g)) = tag <> g
+    go (Ann tag _) = tag
+
 compile :: Expr a -> Text
 compile = toAST >>> compileAST
 
@@ -292,36 +363,27 @@ testExpr :: Expr 'U32
 testExpr =
   let x = Var "x"
       y = Var "y"
-   in ECast u32 (EInt 2) * EAt (At gradient (N2 (EVar x) (EVar y)) (Just gradient))
-
-data SpaceType = Function | Image deriving (Eq)
-
-isFunc :: Space d f => f d a -> Bool
-isFunc s = spaceType s == Function
+      args = N2 x y
+   in ECast u32 (EInt 2) * EAt (at (gradient args) (EVar <$> args))
 
 class (HasCoordinates d) => Space d f where
   spaceID :: f d a -> Text
-  spaceType :: f d a -> SpaceType
   at :: f d a -> Coordinates d -> At d a
 
 instance Space 'D1 Func where
-  spaceID = unFuncName . name
-  spaceType _ = Function
+  spaceID = unFuncName . funcName
   at f c = At {space = f, coordinates = c, func = Just f}
 
 instance Space 'D2 Func where
-  spaceID = unFuncName . name
-  spaceType _ = Function
+  spaceID = unFuncName . funcName
   at f c = At {space = f, coordinates = c, func = Just f}
 
 instance Space 'D3 Func where
-  spaceID = unFuncName . name
-  spaceType _ = Function
+  spaceID = unFuncName . funcName
   at f c = At {space = f, coordinates = c, func = Just f}
 
 instance Space 'D4 Func where
-  spaceID = unFuncName . name
-  spaceType _ = Function
+  spaceID = unFuncName . funcName
   at f c = At {space = f, coordinates = c, func = Just f}
 
 --------------------------------------------------------------------------------
@@ -342,51 +404,41 @@ counterL = lens counter (\s c -> s {counter = c})
 newVar :: AppM Var
 newVar = Var <$> getNextID "var_"
 
-newFunc :: forall d a. (InferArgs d -> Expr a) -> AppM (Func d a)
-newFunc body = do
-  name <- FuncName <$> getNextID "func_"
-  let func :: Func d a = Func {name, body}
+newFunc :: forall d a. InferArgs d -> (InferArgs d -> Expr a) -> AppM (Func d a)
+newFunc funcArgs funcBody = do
+  funcName <- FuncName <$> getNextID "func_"
+  let func :: Func d a = Func {funcName, funcBody, funcArgs}
   pure func
+
+realize :: Coordinates d -> Func d a -> Buffer
+realize coords func = Buffer {bufferName, bufferFunc, bufferSize}
+  where
+    bufferName = undefined
+    bufferFunc = undefined
+    bufferSize = undefined
 
 --------------------------------------------------------------------------------
 
-constant :: Func d 'U64
-constant = Func {name = "blur_x", body = \_ -> EInt 9}
+constant :: InferArgs d -> Func d 'U64
+constant funcArgs = Func {funcName = "blur_x", funcBody = \_ -> EInt 9, funcArgs}
 
-brighten :: (Space 'D2 f) => Double -> f 'D2 (a :: ScalarType) -> Func 'D2 'F64
-brighten q space = Func {name = "brighten", body}
+brighten :: (Space 'D2 f) => Double -> N2 Var -> f 'D2 (a :: ScalarType) -> Func 'D2 'F64
+brighten q funcArgs space = Func {funcName = "brighten", funcBody, funcArgs}
   where
-    body (N2 x y) =
+    funcBody (N2 x y) =
       EMul (EDouble q) $ EAt $ At space (N2 (ECast u32 $ EVar x) (ECast u32 $ EVar y)) Nothing
 
-gradient :: Func 'D2 'U32
-gradient = Func {name = "gradient", body}
+gradient :: N2 Var -> Func 'D2 'U32
+gradient funcArgs = Func {funcName = "gradient", funcBody, funcArgs}
   where
-    body (N2 x y) = (EAdd `on` EVar) x y
+    funcBody (N2 x y) = (EAdd `on` EVar) x y
 
 wrapInParens :: Text -> Text
 wrapInParens x = "(" <> x <> ")"
 
-class Halogenide m a where
-  render :: a -> m Text
-
-class ExprType x where
-  showType :: x -> Text
-
-instance ExprType (Proxy 'U8) where showType _ = "UInt(8)"
-
-instance ExprType (Proxy 'U16) where showType _ = "UInt(16)"
-
-instance ExprType (Proxy 'U32) where showType _ = "UInt(32)"
-
-instance ExprType (Proxy 'U64) where showType _ = "UInt(64)"
-
-instance ExprType (Proxy 'F32) where showType _ = "Float(32)"
-
-instance ExprType (Proxy 'F64) where showType _ = "Float(64)"
-
-gradientFunc :: Func 'D2 'U32
-gradientFunc = Func {name = "gradient", body}
+gradientFunc :: N2 Var -> Func 'D2 'U32
+gradientFunc funcArgs = Func {funcName = "gradient", funcBody, funcArgs}
   where
-    body (N2 x y) = ECast u32 $ (EAdd `on` EVar) x y
+    funcBody (N2 x y) = ECast u32 $ (EAdd `on` EVar) x y
 
+-- Escribe uan funcion para calcular rel factorial

@@ -10,36 +10,32 @@
 module Main where
 
 import Codec.Picture qualified as P
-import Codec.Picture.Saving qualified as P
-import Codec.Picture.Types
 import Codec.Picture.Types qualified as P
-import Control.Applicative
-import Data.ByteString.Lazy.Char8 qualified as B
-import Data.Either
 import Data.Word
-import GHC.Generics (Generic)
 import Options.Generic
-import System.Environment
 
 type Triplet a = (a, a, a)
 
+-- | Computes the sum of all pixel values in an image.
 sumPixels :: P.Image P.PixelYCbCr8 -> Triplet Double
 sumPixels = P.pixelFold fn (0.0, 0.0, 0.0)
   where
     fn :: Triplet Double -> Int -> Int -> P.PixelYCbCr8 -> Triplet Double
     fn (a', b', c') _ _ ((P.PixelYCbCr8 a b c)) = (aa, bb, cc)
       where
-        f a b = fromIntegral a + b
+        f x y = fromIntegral x + y
         !aa = f a a'
         !bb = f b b'
         !cc = f c c'
 
+-- | Computes the mean of all pixel values in an image.
 meanPixels :: P.Image P.PixelYCbCr8 -> Triplet Double
 meanPixels img = fn $ sumPixels img
   where
     size = fromIntegral $ P.imageWidth img * P.imageHeight img
     fn (x, y, z) = (x / size, y / size, z / size)
 
+-- | Computes the standard deviation of all pixel values in an image.
 stdPixels :: P.Image P.PixelYCbCr8 -> Triplet Double
 stdPixels img = g $ P.pixelFold fn (0.0, 0.0, 0.0) img
   where
@@ -54,7 +50,7 @@ stdPixels img = g $ P.pixelFold fn (0.0, 0.0, 0.0) img
       Triplet Double
     fn (a', b', c') _ _ ((P.PixelYCbCr8 a b c)) = (aa, bb, cc)
       where
-        f a b = (fromIntegral a - b) ** 2
+        f x y = (fromIntegral x - y) ** 2
         !aa = a' + f a ma
         !bb = b' + f b mb
         !cc = c' + f c mc
