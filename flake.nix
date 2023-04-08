@@ -50,7 +50,6 @@
             ghcid
             hpack
             hlint
-            yamlfix
           ];
         };
 
