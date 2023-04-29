@@ -5,33 +5,62 @@
     nixpkgs = { url = "github:NixOS/nixpkgs/"; };
     flake-utils = { url = "github:numtide/flake-utils"; };
     nix-filter.url = "github:numtide/nix-filter";
+    pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
+    pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, flake-utils, nix-filter, ... }:
+  outputs = { self, nixpkgs, flake-utils, nix-filter, pre-commit-hooks, ... }:
 
     let
       pkgsFor = system: import nixpkgs {
         inherit system;
         overlays = [
-          self.overlays.${system}
+          self.overlays.default
           nix-filter.overlays.default
         ];
       };
-    in
+      filteredSrc =
+        nix-filter.lib {
+          root = ./.;
+          include = [
+            "src/"
+            "test/"
+            "package.yaml"
+            "LICENSE"
+          ];
+        };
 
+    in
+    {
+      overlays.default = final: prev: {
+        haskellPackages = prev.haskellPackages.override (old: {
+          overrides = final.lib.composeExtensions (old.overrides or (_: _: { }))
+            (self: super: {
+              colortransfer = self.generateOptparseApplicativeCompletions
+                [ "colortransfer" ]
+                (self.callCabal2nix "colortransfer" filteredSrc { });
+            }
+            );
+        });
+      };
+    }
+    //
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = pkgsFor system;
-        filteredSrc =
-          pkgs.nix-filter {
-            root = ./.;
-            include = [
-              "src/"
-              "test/"
-              "package.yaml"
-              "LICENSE"
-            ];
+        precommitCheck = pre-commit-hooks.lib.${system}.run {
+          src = ./.;
+          hooks = {
+            actionlint.enable = true;
+            hlint.enable = true;
+            hpack.enable = true;
+            markdownlint.enable = true;
+            nil.enable = true;
+            nixpkgs-fmt.enable = true;
+            ormolu.enable = true;
+            statix.enable = true;
           };
+        };
       in
       rec {
         packages = {
@@ -45,25 +74,22 @@
         devShells.default = pkgs.haskellPackages.shellFor {
           packages = p: [ packages.colortransfer ];
           buildInputs = with pkgs; with pkgs.haskellPackages; [
-            haskell-language-server
+            actionlint
             cabal-install
             ghcid
-            hpack
+            haskell-language-server
             hlint
+            hpack
+            nil
+            nixpkgs-fmt
+            ormolu
+            statix
           ];
+          inherit (precommitCheck) shellHook;
         };
 
-        overlays = final: prev: {
-          haskellPackages = prev.haskellPackages.override (old: {
-            overrides = final.lib.composeExtensions (old.overrides or (_: _: { }))
-              (self: super: {
-                colortransfer = self.generateOptparseApplicativeCompletions
-                  [ "colortransfer" ]
-                  (self.callCabal2nix "colortransfer" filteredSrc { });
-              }
-              );
-          });
-        };
+        checks = { pre-commit-check = precommitCheck; };
+
       });
   nixConfig = {
     extra-substituters = "https://opensource.cachix.org";
