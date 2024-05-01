@@ -58,7 +58,6 @@
             nil.enable = true;
             nixpkgs-fmt.enable = true;
             ormolu.enable = true;
-            statix.enable = true;
           };
         };
       in
