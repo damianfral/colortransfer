@@ -6,8 +6,9 @@ license-file: LICENSE
 dependencies:
   - base
   - bytestring
-  - optparse-generic
   - JuicyPixels
+  - optparse-generic
+  - relude
 library:
   source-dirs: ./src/
 executables:
