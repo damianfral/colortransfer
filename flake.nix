@@ -2,7 +2,7 @@
   description = "A tool to transfer color between images.";
 
   inputs = {
-    nixpkgs = { url = "github:NixOS/nixpkgs/"; };
+    nixpkgs = { url = "github:NixOS/nixpkgs/24.05"; };
     flake-utils = { url = "github:numtide/flake-utils"; };
     nix-filter.url = "github:numtide/nix-filter";
     pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
