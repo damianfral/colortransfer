@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module ColorTransferSpec where
@@ -6,7 +7,6 @@ module ColorTransferSpec where
 import ColorTransfer.CLI
 import Relude
 import System.FilePath
-import System.IO.Temp
 import Test.Syd
 
 images :: [FilePath]
@@ -33,30 +33,23 @@ transfers = do
           <> "--"
           <> showMethod met
           <.> "jpeg"
-  pure (met, inp, ref, out)
+  pure
+    ( met,
+      "./test-resources" </> "originals" </> inp,
+      "./test-resources" </> "originals" </> ref,
+      "./test-resources" </> "processed" </> out
+    )
   where
     transformName a = take (length a - 13) a
     showMethod 1 = "histogram-matching"
     showMethod 2 = "ellipsoid-transformation"
     showMethod _ = ""
 
-runColorTransfer' :: (Int, FilePath, FilePath, FilePath) -> IO ByteString
-runColorTransfer' (me, inp, ref, out) =
-  withSystemTempDirectory "colortransfer" $ \dir -> do
-    runColorTransfer
-      $ Opts
-        { input = "test-resources" </> "originals" </> inp,
-          reference = "test-resources" </> "originals" </> ref,
-          output = dir </> out,
-          method = me
-        }
-    readFileBS $ dir </> out
-
 spec :: Spec
 spec = describe "colortransfer" $ do
   forM_ transfers $ \(me, inputImage, referenceImage, outputImage) -> do
-    let gFile = "./test-resources" </> "processed" </> outputImage
-    let gProducer = runColorTransfer' (me, inputImage, referenceImage, outputImage)
+    let goldenFile = outputImage
+    let testUnit = runColorTransfer me inputImage referenceImage
     let description =
           toString
             $ unwords
@@ -65,6 +58,11 @@ spec = describe "colortransfer" $ do
                   "->",
                   outputImage,
                   "via",
-                  if me == 1 then "histogram matching" else "ellipsoid transformation"
+                  if me == 1
+                    then "histogram matching"
+                    else "ellipsoid transformation"
                 ]
-    it description $ goldenByteStringFile gFile gProducer
+    eResult <- liftIO testUnit
+    it description $ case eResult of
+      Left e -> expectationFailure e
+      Right v -> pure $ goldenByteStringFile goldenFile $ pure (toStrict v)

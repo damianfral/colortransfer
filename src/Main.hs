@@ -8,4 +8,4 @@ import Options.Generic
 main :: IO ()
 main = do
   options <- unwrapRecord "Transfer color between images"
-  CLI.runColorTransfer options
+  CLI.runColorTransferAndExit options

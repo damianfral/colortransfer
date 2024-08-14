@@ -53,5 +53,4 @@ tests:
       - sydtest
       - sydtest-discover
       - colortransfer
-      - temporary
       - filepath

@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -13,6 +14,7 @@ import qualified ColorTransfer.HistogramMatching as HM
 import ColorTransfer.Utils
 import Options.Generic
 import Relude
+import System.IO (hPutStrLn)
 
 data Opts w = Opts
   { input :: w ::: String <?> "the image to be used as the color source",
@@ -24,8 +26,8 @@ data Opts w = Opts
 
 instance ParseRecord (Opts Wrapped)
 
-runColorTransfer :: Opts Unwrapped -> IO ()
-runColorTransfer (Opts {..}) = do
+runColorTransfer :: Int -> FilePath -> FilePath -> IO (Either String LByteString)
+runColorTransfer method input reference = do
   inputImg <- P.readImage input
   referenceImg <- P.readImage reference
   let transfer = if method == 1 then HM.transferColor else ET.transferColor
@@ -33,7 +35,10 @@ runColorTransfer (Opts {..}) = do
         transfer
           <$> (dynamicImagetoYCbCr <$> inputImg)
           <*> (dynamicImagetoYCbCr <$> referenceImg)
+  pure $ P.encodeJpeg <$> result
 
-  case result of
-    Right img -> writeFileLBS output $ P.encodeJpeg img
-    Left err -> putStrLn err
+runColorTransferAndExit :: Opts Unwrapped -> IO ()
+runColorTransferAndExit Opts {..} =
+  runColorTransfer method input reference >>= \case
+    Right jpeg -> writeFileLBS output jpeg >> exitSuccess
+    Left err -> hPutStrLn stderr err >> exitFailure
