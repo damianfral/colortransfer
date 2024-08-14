@@ -10,6 +10,17 @@ dependencies:
   - JuicyPixels
   - optparse-generic
   - relude
+ghc-options:
+  - -fwrite-ide-info
+  - -Wall
+  - -Wincomplete-uni-patterns
+  - -Wincomplete-record-updates
+  - -Wpartial-fields
+  - -Widentities
+  - -Wredundant-constraints
+  - -Wcpp-undef
+  - -Wunused-packages
+
 library:
   source-dirs: ./src/
 executables:
