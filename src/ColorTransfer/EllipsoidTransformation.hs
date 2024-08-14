@@ -4,23 +4,9 @@ module ColorTransfer.EllipsoidTransformation where
 
 import qualified Codec.Picture as P
 import qualified Codec.Picture.Types as P
+import ColorTransfer.Utils
 import qualified Numeric.LinearAlgebra as L
 import Relude hiding (fromList, toList, (<>))
-
-type Triplet a = (a, a, a)
-
--- Convert PixelYCbCr8 to Vector Double
-pixelToVector :: P.PixelYCbCr8 -> L.Vector Double
-pixelToVector (P.PixelYCbCr8 y cb cr) =
-  L.vector $ fromIntegral <$> [y, cb, cr]
-
--- Calculate mean vector of the pixels
-meanPixels :: P.Image P.PixelYCbCr8 -> L.Vector Double
-meanPixels img =
-  (/ fromIntegral size) $ P.pixelFold (\acc _ _ p -> acc + pixelToVector p) zero img
-  where
-    size = P.imageWidth img * P.imageHeight img
-    zero = L.vector [0.0, 0.0, 0.0]
 
 -- Calculate covariance matrix of the pixels
 covarianceMatrix :: P.Image P.PixelYCbCr8 -> L.Vector Double -> L.Matrix Double
@@ -73,20 +59,3 @@ matrixSqrt m =
   let (eigVals, eigVecs) = L.eigSH $ L.sym m
       sqrtEigVals = L.diag $ L.cmap sqrt eigVals
    in eigVecs L.<> sqrtEigVals L.<> L.tr eigVecs
-
--- Convert dynamic image to YCbCr8 image
-dynamicImagetoYCbCr :: P.DynamicImage -> P.Image P.PixelYCbCr8
-dynamicImagetoYCbCr (P.ImageRGB8 img) = P.convertImage img
-dynamicImagetoYCbCr (P.ImageYCbCr8 img) = P.promoteImage img
-dynamicImagetoYCbCr _ = undefined
-
--- Convert image back to RGB8
-imageToRGB :: P.Image P.PixelYCbCr8 -> P.Image P.PixelRGB8
-imageToRGB = P.convertImage
-
-{-# INLINE clampToWord8 #-}
-clampToWord8 :: Double -> Word8
-clampToWord8 a
-  | a > 255 = 255
-  | a < 0 = 0
-  | otherwise = round a

@@ -12,7 +12,8 @@ import Codec.Picture qualified as P
 import Codec.Picture.Saving qualified as P
 import Codec.Picture.Types
 import Codec.Picture.Types qualified as P
-import ColorTransfer.HistogramMatching
+import ColorTransfer.EllipsoidTransformation qualified as ET
+import ColorTransfer.HistogramMatching qualified as HM
 import Control.Applicative
 import Data.ByteString.Lazy.Char8 qualified as B
 import Data.Either
@@ -24,7 +25,8 @@ import System.Environment
 data Opts w = Opts
   { source :: w ::: String <?> "the image to be used as the color source",
     target :: w ::: String <?> "the image we want to transform",
-    output :: w ::: String <?> "the output image"
+    output :: w ::: String <?> "the output image",
+    histogram :: w ::: Bool <?> "use simple histogram matching"
   }
   deriving (Generic)
 
@@ -36,12 +38,12 @@ run (Opts {..}) = do
   targetImg <- P.readImage target
 
   let result =
-        transferColor
-          <$> (dynamicImagetoYCbCr <$> sourceImg)
-          <*> (dynamicImagetoYCbCr <$> targetImg)
+        (if histogram then HM.transferColor else ET.transferColor)
+          <$> (HM.dynamicImagetoYCbCr <$> sourceImg)
+          <*> (HM.dynamicImagetoYCbCr <$> targetImg)
 
   case result of
-    Right img -> P.writePng output $ imageToRGB img
+    Right img -> P.writePng output $ HM.imageToRGB img
     Left err -> putStrLn err
 
 main :: IO ()
