@@ -62,13 +62,12 @@
         };
       in
       rec {
-        packages = {
+        packages = rec {
           colortransfer = pkgs.haskell.lib.justStaticExecutables (
             pkgs.haskellPackages.colortransfer
           );
+          default = colortransfer;
         };
-
-        defaultPackage = packages.colortransfer;
 
         devShells.default = pkgs.haskellPackages.shellFor {
           packages = p: [ packages.colortransfer ];
