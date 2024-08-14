@@ -36,6 +36,13 @@
         haskellPackages = prev.haskellPackages.override (old: {
           overrides = final.lib.composeExtensions (old.overrides or (_: _: { }))
             (self: super: {
+              hmatrix = super.hmatrix.overrideAttrs (drv: {
+                configureFlags = (drv.configureFlags or [ ]) ++ [ "-fopenblas" ];
+                extraLibraries = [ final.openblasCompat ];
+                preConfigure = ''
+                  sed -i hmatrix.cabal -e 's@/usr/lib/openblas/lib@${final.openblasCompat}/lib@'
+                '';
+              });
               colortransfer = self.generateOptparseApplicativeCompletions
                 [ "colortransfer" ]
                 (self.callCabal2nix "colortransfer" filteredSrc { });
