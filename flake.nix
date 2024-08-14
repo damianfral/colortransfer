@@ -27,6 +27,7 @@
             "test/"
             "package.yaml"
             "LICENSE"
+            "test-resources/"
           ];
         };
 
@@ -45,9 +46,12 @@
               });
               colortransfer = self.generateOptparseApplicativeCompletions
                 [ "colortransfer" ]
-                (self.callCabal2nix "colortransfer" filteredSrc { });
-            }
-            );
+                ((self.callCabal2nix "colortransfer" filteredSrc { }).overrideAttrs (oldAttrs: {
+                  preBuild = ''
+                    ln -s ${filteredSrc}/test-resources $PWD/test-resources
+                  '';
+                }));
+            });
         });
       };
     }

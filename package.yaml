@@ -21,6 +21,10 @@ ghc-options:
   - -Wcpp-undef
   - -Wunused-packages
 
+extra-source-files:
+  - ./test-resources/originals/*.jpg
+  - ./test-resources/processed/*.jpeg
+
 library:
   source-dirs: ./src/
 
@@ -34,3 +38,20 @@ executables:
       - -O2 -optc-O3 -optc-ffast-math
       - -fexcess-precision 
       - -with-rtsopts=-N
+tests:
+  colortransfer-test:
+    main: Spec.hs
+    source-dirs: test
+    ghc-options:
+      - -rtsopts
+      - -threaded
+      - -with-rtsopts=-N
+      - -O2 -optc-O3 -optc-ffast-math
+      - -fexcess-precision 
+    dependencies:
+      - QuickCheck
+      - sydtest
+      - sydtest-discover
+      - colortransfer
+      - temporary
+      - filepath
