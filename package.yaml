@@ -23,8 +23,14 @@ ghc-options:
 
 library:
   source-dirs: ./src/
+
 executables:
   colortransfer:
     main: Main.hs
     source-dirs: ./src/
-    ghc-options: [-Wall, -rtsopts, -threaded, -with-rtsopts=-N, -O2]
+    ghc-options: 
+      - -rtsopts
+      - -threaded
+      - -O2 -optc-O3 -optc-ffast-math
+      - -fexcess-precision 
+      - -with-rtsopts=-N
