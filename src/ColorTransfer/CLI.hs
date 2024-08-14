@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module ColorTransfer.CLI where
 
@@ -11,6 +12,7 @@ import qualified ColorTransfer.EllipsoidTransformation as ET
 import qualified ColorTransfer.HistogramMatching as HM
 import ColorTransfer.Utils
 import Options.Generic
+import Relude
 
 data Opts w = Opts
   { input :: w ::: String <?> "the image to be used as the color source",
@@ -32,5 +34,5 @@ runColorTransfer (Opts {..}) = do
           <*> (dynamicImagetoYCbCr <$> referenceImg)
 
   case result of
-    Right img -> P.writePng output $ imageToRGB img
+    Right img -> writeFileLBS output $ P.encodeJpeg img
     Left err -> putStrLn err
