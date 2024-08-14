@@ -22,11 +22,10 @@ data Opts w = Opts
 
 instance ParseRecord (Opts Wrapped)
 
-run :: Opts Unwrapped -> IO ()
-run (Opts {..}) = do
+runColorTransfer :: Opts Unwrapped -> IO ()
+runColorTransfer (Opts {..}) = do
   inputImg <- P.readImage input
   referenceImg <- P.readImage reference
-
   let result =
         (if histogram then HM.transferColor else ET.transferColor)
           <$> (dynamicImagetoYCbCr <$> inputImg)
