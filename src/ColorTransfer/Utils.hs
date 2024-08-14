@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 module ColorTransfer.Utils where
 
 import qualified Codec.Picture as P
@@ -24,13 +26,11 @@ clampToWord8 a
 
 -- Convert PixelYCbCr8 to Vector Double
 pixelToVector :: P.PixelYCbCr8 -> L.Vector Double
-pixelToVector (P.PixelYCbCr8 y cb cr) =
-  L.vector $ fromIntegral <$> [y, cb, cr]
+pixelToVector (P.PixelYCbCr8 y cb cr) = L.vector $ fromIntegral <$> [y, cb, cr]
 
 -- Calculate mean vector of the pixels
 meanPixels :: P.Image P.PixelYCbCr8 -> L.Vector Double
-meanPixels img =
-  P.pixelFold sumColorChannels zero img / fromIntegral size
+meanPixels img = P.pixelFold sumColorChannels zero img / fromIntegral size
   where
     sumColorChannels acc _ _ p = acc + pixelToVector p
     size = P.imageWidth img * P.imageHeight img
@@ -38,10 +38,11 @@ meanPixels img =
 
 -- Calculate standard deviation vector of the pixels
 stdPixels :: P.Image P.PixelYCbCr8 -> L.Vector Double
-stdPixels img = L.cmap sqrt $ (/ fromIntegral (size - 1)) $ P.pixelFold fn (L.vector [0, 0, 0]) img
+stdPixels img =
+  L.cmap sqrt $ P.pixelFold fn (L.vector [0, 0, 0]) img / fromIntegral (size - 1)
   where
     size = P.imageWidth img * P.imageHeight img
     mean = meanPixels img
-    fn acc _ _ p = acc + (centered * centered)
+    fn !acc _ _ p = acc + (centered * centered)
       where
         centered = pixelToVector p - mean

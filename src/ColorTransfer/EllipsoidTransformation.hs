@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE Strict #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 module ColorTransfer.EllipsoidTransformation where
@@ -10,30 +12,25 @@ import Relude hiding (fromList, toList, (<>))
 
 -- Calculate covariance matrix of the pixels
 covarianceMatrix :: P.Image P.PixelYCbCr8 -> L.Vector Double -> L.Matrix Double
-covarianceMatrix img meanVec =
-  (/ fromIntegral (size - 1)) $ P.pixelFold fn zero img
+covarianceMatrix img meanVec = L.scale (1 / fromIntegral (size - 1)) $ P.pixelFold fn zero img
   where
     size = P.imageWidth img * P.imageHeight img
-    zero =
-      L.fromRows
-        [ L.vector [0.0, 0.0, 0.0],
-          L.vector [0.0, 0.0, 0.0],
-          L.vector [0.0, 0.0, 0.0]
-        ]
-    fn acc _ _ p = acc + L.outer centered centered
+    zero = L.fromLists (replicate 3 (replicate 3 0.0))
+    fn !acc _ _ p = acc + L.outer centered centered
       where
         centered = pixelToVector p - meanVec
 
 -- Perform color transfer using ellipsoid method
-transferColor ::
-  P.Image P.PixelYCbCr8 -> P.Image P.PixelYCbCr8 -> P.Image P.PixelYCbCr8
+transferColor :: P.Image P.PixelYCbCr8 -> P.Image P.PixelYCbCr8 -> P.Image P.PixelYCbCr8
 transferColor from to =
-  P.pixelMap (applyTransformation srcMean srcCov tarMean tarCov) from
-  where
-    srcMean = meanPixels from
-    tarMean = meanPixels to
-    srcCov = covarianceMatrix from srcMean
-    tarCov = covarianceMatrix to tarMean
+  let srcMean = meanPixels from
+      tarMean = meanPixels to
+      srcCov = covarianceMatrix from srcMean
+      tarCov = covarianceMatrix to tarMean
+      srcCovSqrt = matrixSqrt srcCov
+      tarCovSqrt = matrixSqrt tarCov
+      srcCovSqrtInv = L.inv srcCovSqrt
+   in P.pixelMap (applyTransformation srcMean srcCovSqrtInv tarMean tarCovSqrt) from
 
 -- Apply the transformation matrix to the pixel
 applyTransformation ::
@@ -43,14 +40,11 @@ applyTransformation ::
   L.Matrix Double ->
   P.PixelYCbCr8 ->
   P.PixelYCbCr8
-applyTransformation srcMean srcCov tarMean tarCov (P.PixelYCbCr8 y cb cr) =
+applyTransformation !srcMean !srcCovSqrtInv !tarMean !tarCovSqrt (P.PixelYCbCr8 y cb cr) =
   let pixelVec = pixelToVector (P.PixelYCbCr8 y cb cr)
       centered = pixelVec - srcMean
-      srcCovSqrt = matrixSqrt srcCov
-      tarCovSqrt = matrixSqrt tarCov
-      srcCovSqrtInv = L.inv srcCovSqrt
       transformedVec = tarMean + (tarCovSqrt L.#> (srcCovSqrtInv L.#> centered))
-      [y', cb', cr'] = clampToWord8 <$> L.toList transformedVec
+      [!y', !cb', !cr'] = clampToWord8 <$> L.toList transformedVec
    in P.PixelYCbCr8 y' cb' cr'
 
 -- Calculate the matrix square root
