@@ -7,9 +7,10 @@
     nix-filter.url = "github:numtide/nix-filter";
     pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
     pre-commit-hooks.inputs.nixpkgs.follows = "nixpkgs";
+    feedback.url = "github:NorfairKing/feedback";
   };
 
-  outputs = { self, nixpkgs, flake-utils, nix-filter, pre-commit-hooks, ... }:
+  outputs = { self, nixpkgs, flake-utils, nix-filter, pre-commit-hooks, feedback, ... }:
 
     let
       pkgsFor = system: import nixpkgs {
@@ -85,6 +86,7 @@
           buildInputs = with pkgs; with pkgs.haskellPackages; [
             actionlint
             cabal-install
+            feedback.packages.${system}.default
             ghcid
             haskell-language-server
             hlint
