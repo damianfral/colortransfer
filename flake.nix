@@ -101,8 +101,15 @@
 
       });
   nixConfig = {
-    extra-substituters = "https://opensource.cachix.org";
-    extra-trusted-public-keys = "opensource.cachix.org-1:6t9YnrHI+t4lUilDKP2sNvmFA9LCKdShfrtwPqj2vKc=";
+    extra-substituters = [
+      "https://opensource.cachix.org"
+      "https://cache.garnix.io"
+    ];
+
+    extra-trusted-public-keys = [
+      "opensource.cachix.org-1:6t9YnrHI+t4lUilDKP2sNvmFA9LCKdShfrtwPqj2vKc="
+      "cache.garnix.io:CTFPyKSLcx5RMJKfLo5EEPUObbA78b0YQ2DTCJXqr9g="
+    ];
   };
 }
 
