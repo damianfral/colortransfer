@@ -41,8 +41,8 @@ nix run github:damianfral/colortransfer -- \
 
 ## Options
 
-- `--input`: The image to be used as the color source
-- `--reference`: The image we want to transform
+- `--input`: The image we want to transform
+- `--reference`: The image to be used as the color source
 - `--output`: The output image
 - `--method`: The color transfer method to use (default: 2)
   - 1: Histogram matching
