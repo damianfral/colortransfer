@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: install nix
         uses: cachix/install-nix-action@v31
       - uses: cachix/cachix-action@v16
@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: install nix
         uses: cachix/install-nix-action@v31
       - uses: cachix/cachix-action@v16
