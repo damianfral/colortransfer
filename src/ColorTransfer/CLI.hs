@@ -33,7 +33,8 @@ runColorTransfer method input reference = do
   let transfer = if method == 1 then HM.transferColor else ET.transferColor
   let result =
         transfer
-          <$> (dynamicImagetoYCbCr <$> inputImg)
+          . dynamicImagetoYCbCr
+          <$> inputImg
           <*> (dynamicImagetoYCbCr <$> referenceImg)
   pure $ P.encodeJpeg <$> result
 
