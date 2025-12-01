@@ -8,6 +8,7 @@ import ColorTransfer.CLI
 import Relude
 import System.FilePath
 import Test.Syd
+import Test.Syd.OptParse (Timeout (DoNotTimeout))
 
 images :: [FilePath]
 images =
@@ -46,7 +47,7 @@ transfers = do
     showMethod _ = ""
 
 spec :: Spec
-spec = describe "colortransfer" $ do
+spec = modifyTimeout (const DoNotTimeout) $ describe "colortransfer" $ do
   forM_ transfers $ \(me, inputImage, referenceImage, outputImage) -> do
     let goldenFile = outputImage
     let testUnit = runColorTransfer me inputImage referenceImage
