@@ -72,7 +72,6 @@
           alejandra.enable = true;
           hlint.enable = true;
           hpack.enable = true;
-          markdownlint.enable = true;
           nil.enable = true;
           ormolu.enable = true;
         };
