@@ -1,5 +1,7 @@
 # colortransfer
 
+![screenshot](screenshot.png)
+
 `colortransfer` is a small tool that transfers the color distribution
 of one image to another image. It offers two methods of color transfer,
 histogram matching and ellipsoid transformation.
