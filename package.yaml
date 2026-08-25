@@ -1,5 +1,6 @@
 ---
 name: colortransfer
+synopsis: Transfer color between images
 version: 2.0.0.0
 license: MIT
 license-file: LICENSE
